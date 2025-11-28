@@ -1,8 +1,10 @@
 package model
 
-type roles struct {
-  id: UUID PRIMARY KEY 
-  name: VARCHAR(50) UNIQUE NOT NULL 
-  description: TEXT 
-  created_at: TIMESTAMP DEFAULT NOW() 
-} 
+import "time"
+
+type Role struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+}

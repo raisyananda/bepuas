@@ -1,11 +1,13 @@
 package model
 
-type students struct { 
-  id: UUID PRIMARY KEY 
-  user_id: UUID FOREIGN KEY -> users.id 
-  student_id: VARCHAR(20) UNIQUE NOT NULL 
-  program_study: VARCHAR(100) 
-  academic_year: VARCHAR(10) 
-  advisor_id: UUID FOREIGN KEY -> lecturers.id 
-  created_at: TIMESTAMP DEFAULT NOW() 
-} 
+import "time"
+
+type Student struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	StudentID    string    `json:"student_id"`
+	ProgramStudy string    `json:"program_study"`
+	AcademicYear string    `json:"academic_year"`
+	AdvisorID    string    `json:"advisor_id"`
+	CreatedAt    time.Time `json:"created_at"`
+}
