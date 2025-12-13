@@ -14,23 +14,6 @@ func NewAuthRepository(db *sql.DB) *AuthRepository {
 	return &AuthRepository{DB: db}
 }
 
-/*
-	func (r *AuthRepository) FindByUsernameOrEmail(identifier string) (model.User, string, error) {
-		var u model.User
-		var hash string
-		err := r.DB.QueryRow(`
-			SELECT id, username, email, full_name, role_id, is_active, created_at, password_hash
-			FROM users WHERE username=$1 OR email=$1
-		`, identifier).Scan(&u.ID, &u.Username, &u.Email, &u.FullName, &u.RoleID, &u.IsActive, &u.CreatedAt, &hash)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				return u, "", errors.New("not found")
-			}
-			return u, "", err
-		}
-		return u, hash, nil
-	}
-*/
 func (r *AuthRepository) FindByUsernameOrEmail(username string) (model.User, error) {
 	query := `
 		SELECT id, username, email, password_hash, role_id, is_active
