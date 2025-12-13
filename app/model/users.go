@@ -36,15 +36,3 @@ type JWTClaims struct {
 	Permissions []string `json:"permissions"`
 	jwt.RegisteredClaims
 }
-
-type Achievement struct {
-	ID              string                 `json:"id"`
-	StudentUserID   string                 `json:"student_user_id"`
-	AchievementType string                 `json:"achievement_type"`
-	Title           string                 `json:"title"`
-	Description     string                 `json:"description"`
-	Details         map[string]interface{} `json:"details"`
-	Status          string                 `json:"status"`
-	CreatedAt       time.Time              `json:"created_at"`
-	UpdatedAt       time.Time              `json:"updated_at"`
-}
