@@ -20,9 +20,10 @@ func init() {
 }
 
 type JWTClaim struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	UserID      string   `json:"user_id"`
+	Username    string   `json:"username"`
+	Role        string   `json:"role"`        // MAHASISWA, ADMIN, DOSEN
+	Permissions []string `json:"permissions"` // achievement:create, dll
 	jwt.RegisteredClaims
 }
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 
 	"bepuas/app/model"
 )
@@ -14,25 +15,33 @@ func NewAuthRepository(db *sql.DB) *AuthRepository {
 	return &AuthRepository{DB: db}
 }
 
-func (r *AuthRepository) FindByUsernameOrEmail(username string) (model.User, error) {
+func (r *AuthRepository) FindByUsernameOrEmail(identifier string) (model.User, error) {
+	var u model.User
+
 	query := `
-		SELECT id, username, email, password_hash, role_id, is_active
-		FROM users
-		WHERE username = $1 OR email = $1
+	SELECT id, username, email, password_hash, full_name, role_id, is_active, created_at, updated_at
+	FROM users
+	WHERE username = $1 OR email = $1
+	LIMIT 1
 	`
 
-	var user model.User
-	err := r.DB.QueryRow(query, username).
-		Scan(
-			&user.ID,
-			&user.Username,
-			&user.Email,
-			&user.PasswordHash,
-			&user.RoleID,
-			&user.IsActive,
-		)
+	err := r.DB.QueryRow(query, identifier).Scan(
+		&u.ID,
+		&u.Username,
+		&u.Email,
+		&u.PasswordHash,
+		&u.FullName,
+		&u.RoleID,
+		&u.IsActive,
+		&u.CreatedAt,
+		&u.UpdatedAt,
+	)
 
-	return user, err
+	if err != nil {
+		return u, err
+	}
+
+	return u, nil
 }
 
 func (r *AuthRepository) GetPermissionsByRole(roleID string) ([]string, error) {
@@ -58,11 +67,10 @@ func (r *AuthRepository) GetPermissionsByRole(roleID string) ([]string, error) {
 
 func (r *AuthRepository) GetUserPermissions(userID string) ([]string, error) {
 	query := `
-		SELECT p.code
-		FROM permissions p
-		JOIN role_permissions rp ON rp.permission_id = p.id
-		JOIN roles r ON r.id = rp.role_id
-		JOIN users u ON u.role_id = r.id
+		SELECT p.name
+		FROM users u
+		JOIN role_permissions rp ON rp.role_id = u.role_id
+		JOIN permissions p ON p.id = rp.permission_id
 		WHERE u.id = $1
 	`
 
@@ -74,11 +82,15 @@ func (r *AuthRepository) GetUserPermissions(userID string) ([]string, error) {
 
 	var perms []string
 	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err != nil {
+		var code string
+		if err := rows.Scan(&code); err != nil {
 			return nil, err
 		}
-		perms = append(perms, p)
+		perms = append(perms, code)
+	}
+
+	if len(perms) == 0 {
+		return nil, fmt.Errorf("permission kosong untuk user %s", userID)
 	}
 
 	return perms, nil

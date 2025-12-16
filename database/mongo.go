@@ -25,5 +25,5 @@ func ConnectMongoDB() *mongo.Database {
 	}
 
 	log.Println("MongoDB connected")
-	return client.Database("bepuas_db")
+	return client.Database("prestasi_db")
 }

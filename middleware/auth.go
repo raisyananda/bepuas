@@ -2,77 +2,141 @@ package middleware
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"bepuas/app/model"
-	"bepuas/database"
+	"bepuas/app/repository"
 	"bepuas/utils"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthRequired() fiber.Handler {
+func AuthRequired(authRepo *repository.AuthRepository) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "token tidak ditemukan"})
+			return c.Status(http.StatusUnauthorized).
+				JSON(fiber.Map{"error": "token tidak ditemukan"})
 		}
 
-		// Format "Bearer <token>"
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			authHeader = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 
 		claims, err := utils.ValidateToken(authHeader)
 		if err != nil {
-			return c.Status(401).JSON(fiber.Map{"error": "token tidak valid"})
+			return c.Status(http.StatusUnauthorized).
+				JSON(fiber.Map{"error": "token tidak valid"})
 		}
 
-		user := model.User{
-			ID:       claims.UserID,
-			Username: claims.Username,
-			RoleID:   claims.RoleID,
-		}
-		c.Locals("user", user)
-
-		// Ambil user dari Postgres
 		var u model.User
+		var roleName sql.NullString
 
-		var is_active bool
-		query := `SELECT id, username, email, password_hash, full_name, role_id, is_active
-				  FROM users WHERE id = $1 AND is_active = true LIMIT 1`
-		err = database.ConnectPostgres().QueryRow(query, claims.UserID).Scan(
-			&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.FullName, &u.RoleID, &is_active,
+		err = authRepo.DB.QueryRow(`
+			SELECT u.id, u.username, u.email, u.full_name, u.is_active, r.name
+			FROM users u
+			LEFT JOIN roles r ON r.id = u.role_id
+			WHERE u.id = $1
+			LIMIT 1
+		`, claims.UserID).Scan(
+			&u.ID,
+			&u.Username,
+			&u.Email,
+			&u.FullName,
+			&u.IsActive,
+			&roleName,
 		)
+
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return c.Status(http.StatusUnauthorized).JSON(fiber.Map{"error": "user tidak ditemukan atau non-aktif"})
-			}
-			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{"error": "gagal membaca user"})
+			return c.Status(http.StatusUnauthorized).
+				JSON(fiber.Map{"error": "user tidak ditemukan atau non-aktif"})
 		}
 
+		perms, err := authRepo.GetUserPermissions(u.ID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": "gagal ambil permission",
+			})
+		}
+
+		log.Println("role:", roleName)
+		log.Println("permission:", perms)
+
+		// student
+		var studentID sql.NullString
+		_ = authRepo.DB.QueryRow(`
+			SELECT id FROM students WHERE user_id = $1
+		`, u.ID).Scan(&studentID)
+
+		// lecturer
+		var lecturerID sql.NullString
+		_ = authRepo.DB.QueryRow(`
+			SELECT id FROM lecturers WHERE user_id = $1
+		`, u.ID).Scan(&lecturerID)
+
+		// SET CONTEXT
 		c.Locals("user", u)
-		c.Locals("role_id", claims.RoleID)
-		c.Locals("user_id", claims.UserID)
-		c.Locals("token_issued_at", time.Now())
+		c.Locals("user_id", u.ID)
+		c.Locals("permissions", perms)
+
+		if roleName.Valid {
+			c.Locals("role", roleName.String)
+		} else {
+			c.Locals("role", "UNASSIGNED")
+		}
+
+		if studentID.Valid {
+			c.Locals("student_id", studentID.String)
+		}
+		if lecturerID.Valid {
+			c.Locals("lecturer_id", lecturerID.String)
+		}
+
+		if !u.IsActive {
+			return c.Status(403).JSON(fiber.Map{
+				"error": "user tidak aktif",
+			})
+		}
 
 		return c.Next()
 	}
 }
 
-func AdminOnly() fiber.Handler {
+func RequireRole(role string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		role := c.Locals("role")
-		if role == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
+		r := c.Locals("role")
+		if r == nil {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
 		}
 
-		roleStr, ok := role.(string)
-		if !ok || roleStr != "Admin" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "akses hanya untuk admin"})
+		roleName, ok := r.(string)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{"error": "unauthorized"})
+		}
+
+		if roleName != role {
+			return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
 		}
 		return c.Next()
+	}
+}
+
+func RequirePermission(p string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		perms, ok := c.Locals("permissions").([]string)
+		if !ok {
+			return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
+		}
+
+		for _, perm := range perms {
+			if perm == p {
+				return c.Next()
+			}
+		}
+
+		return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
 	}
 }

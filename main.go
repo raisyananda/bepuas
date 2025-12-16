@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"bepuas/app/repository"
 	"bepuas/config"
 	"bepuas/database"
 	"bepuas/route"
@@ -26,9 +27,13 @@ func main() {
 	app := fiber.New()
 	app.Use(logger.New())
 
+	authRepo := repository.NewAuthRepository(pg)
+
 	// Routes
-	route.AuthRoute(app, cfg.AuthService)
-	route.PrestasiRoute(app, cfg.AchievementService)
+	route.AuthRoute(app, cfg.AuthService, authRepo)
+	route.AchievementRoute(app, cfg.AchievementMongoService, cfg.AchievementRefService, authRepo)
+	route.UserRoutes(app, cfg.UserService, authRepo)
+	route.StudentLecturerRoutes(app, cfg.StudentService, cfg.LectureService, authRepo)
 
 	port := os.Getenv("PORT")
 	if port == "" {

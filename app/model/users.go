@@ -17,9 +17,32 @@ type User struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+type UserResponse struct {
+	ID       string  `json:"id"`
+	Username string  `json:"username"`
+	Email    string  `json:"email"`
+	FullName string  `json:"full_name"`
+	RoleID   *string `json:"role_id"`
+	RoleName *string `json:"role_name"`
+}
+
+type UpdateUserRequest struct {
+	Lecturer *struct {
+		LecturerID string `json:"lecturer_id"`
+		Department string `json:"department"`
+	} `json:"lecturer"`
+
+	Student *struct {
+		StudentID    string `json:"student_id"`
+		ProgramStudy string `json:"program_study"`
+		AcademicYear string `json:"academic_year"`
+	} `json:"student"`
+}
+
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	// Username string `json:"username"`
+	Identifier string `json:"identifier"` // username/email
+	Password   string `json:"password"`
 }
 
 type LoginResponse struct {
