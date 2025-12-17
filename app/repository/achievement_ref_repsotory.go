@@ -75,7 +75,7 @@ func (r *AchievementRefRepository) UpdateStatus(mongoID, status string) error {
 	_, err := r.DB.Exec(`
 		UPDATE achievement_references
 		SET status = $1,
-		    updated_at = NOW()
+		    submitted_at = NOW()
 		WHERE mongo_achievement_id = $2
 		  AND status = 'draft'
 	`, status, mongoID)
@@ -131,4 +131,102 @@ func (r *AchievementRefRepository) FindAll() ([]model.AchievementReference, erro
 		refs = append(refs, ref)
 	}
 	return refs, nil
+}
+
+func (r *AchievementRefRepository) FindByMongoID(mongoID string) (*model.AchievementReference, error) {
+	var ref model.AchievementReference
+
+	err := r.DB.QueryRow(`
+		SELECT id, student_id, mongo_achievement_id, status, created_at
+		FROM achievement_references
+		WHERE mongo_achievement_id = $1
+		  AND status != 'deleted'
+	`, mongoID).Scan(
+		&ref.ID,
+		&ref.StudentID,
+		&ref.MongoAchievementID,
+		&ref.Status,
+		&ref.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &ref, nil
+}
+
+func (r *AchievementRefRepository) Reject(mongoID, RejectionNote string) error {
+	res, err := r.DB.Exec(`
+		UPDATE achievement_references
+		SET status = 'rejected',
+		    rejection_note = $2,
+		    updated_at = NOW()
+		WHERE mongo_achievement_id = $1
+		  AND status = 'rejected'
+	`, mongoID, RejectionNote)
+
+	if err != nil {
+		return err
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("prestasi belum disubmit atau sudah diverifikasi")
+	}
+
+	return nil
+}
+
+func (r *AchievementRefRepository) Verify(mongoID, userID string) error {
+	res, err := r.DB.Exec(`
+		UPDATE achievement_references
+		SET status = 'verified',
+		    verified_at = NOW(),
+		    verified_by = $2,
+		    updated_at = NOW()
+		WHERE mongo_achievement_id = $1
+		  AND status = 'submitted'
+	`, mongoID, userID)
+
+	if err != nil {
+		return err
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("prestasi belum disubmit atau sudah diverifikasi")
+	}
+
+	return nil
+}
+
+func (r *AchievementRefRepository) FindHistoryByMongoID(mongoID string) ([]model.AchievementReference, error) {
+	rows, err := r.DB.Query(`
+		SELECT status, rejection_note, created_at, updated_at
+		FROM achievement_references
+		WHERE mongo_achievement_id = $1
+		ORDER BY updated_at ASC
+	`, mongoID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []model.AchievementReference
+	for rows.Next() {
+		var h model.AchievementReference
+		if err := rows.Scan(
+			&h.Status,
+			&h.RejectionNote,
+			&h.CreatedAt,
+			&h.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		history = append(history, h)
+	}
+
+	return history, nil
 }

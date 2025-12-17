@@ -38,6 +38,7 @@ func NewConfig(pg *sql.DB, mongo *mongo.Database) *AppConfig {
 	achievementRefService := service.NewAchievementRefService(
 		achievementRefRepo,
 		achievementMongoService,
+		studentRepo,
 	)
 
 	userService := service.NewUserService(userRepo)

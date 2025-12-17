@@ -28,8 +28,7 @@ func NewAchievementMongoService(r *repository.AchievementMongoRepository, refRep
 	}
 }
 
-// FR-003: Submit Prestasi (Draft)
-// Actor: Mahasiswa
+// Submit Prestasi (Draft)
 func (s *AchievementMongoService) SubmitDraft(c *fiber.Ctx) error {
 	ctx := context.Background()
 	studentID := c.Locals("student_id").(string)
@@ -80,6 +79,70 @@ func (s *AchievementMongoService) List(c *fiber.Ctx) error {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
 		return c.JSON(data)
+	}
+
+	// DOSEN WALI
+	if role == "Dosen Wali" {
+		lecturerID := c.Locals("lecturer_id").(string)
+
+		// 1. Ambil mahasiswa bimbingan
+		students, err := s.studentRepo.FindByAdvisor(lecturerID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		if len(students) == 0 {
+			return c.JSON([]interface{}{})
+		}
+
+		// 2. Map student_id
+		studentIDs := make(map[string]bool)
+		for _, s := range students {
+			studentIDs[s.ID] = true
+		}
+
+		// 3. Ambil semua reference
+		refs, err := s.refRepo.FindAll()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		var mongoIDs []primitive.ObjectID
+		refMap := map[string]model.AchievementReference{}
+
+		for _, r := range refs {
+			if !studentIDs[r.StudentID] {
+				continue
+			}
+
+			oid, err := primitive.ObjectIDFromHex(r.MongoAchievementID)
+			if err != nil {
+				continue
+			}
+
+			mongoIDs = append(mongoIDs, oid)
+			refMap[r.MongoAchievementID] = r
+		}
+
+		achievements, err := s.repo.FindByIDs(ctx, mongoIDs)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		var result []fiber.Map
+		for _, a := range achievements {
+			ref := refMap[a.ID.Hex()]
+			result = append(result, fiber.Map{
+				"id":         a.ID.Hex(),
+				"title":      a.Title,
+				"type":       a.AchievementType,
+				"status":     ref.Status,
+				"student_id": ref.StudentID,
+				"created_at": a.CreatedAt,
+			})
+		}
+
+		return c.JSON(result)
 	}
 
 	// ADMIN (FR-010)
@@ -207,5 +270,50 @@ func (s *AchievementMongoService) Update(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"achievement_id": id.Hex(),
 		"status":         "updated",
+	})
+}
+
+func (s *AchievementMongoService) UploadAttachment(c *fiber.Ctx) error {
+	ctx := context.Background()
+	id, err := primitive.ObjectIDFromHex(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "id tidak valid"})
+	}
+
+	studentID := c.Locals("student_id").(string)
+
+	var req model.Attachment
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "gagal membaca body"})
+	}
+
+	if req.FileURL == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "file_url wajib"})
+	}
+
+	if req.FileName == "" {
+		req.FileName = "unknown"
+	}
+
+	if req.FileType == "" {
+		req.FileType = "application/octet-stream"
+	}
+
+	attachment := model.Attachment{
+		FileName:   req.FileName,
+		FileURL:    req.FileURL,
+		FileType:   req.FileType,
+		UploadedAt: time.Now(),
+	}
+
+	// Simpan attachment ke repo
+	err = s.repo.AddAttachment(ctx, id, studentID, attachment)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "uploaded",
+		"file":   attachment,
 	})
 }

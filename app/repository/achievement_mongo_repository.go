@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -30,6 +31,10 @@ func (r *AchievementMongoRepository) Create(ctx context.Context, a *model.Achiev
 	a.IsDeleted = false
 	a.CreatedAt = time.Now()
 	a.UpdatedAt = time.Now()
+
+	if a.Attachments == nil {
+		a.Attachments = []model.Attachment{}
+	}
 
 	res, err := r.Collection.InsertOne(ctx, a)
 	if err != nil {
@@ -143,10 +148,7 @@ func (r *AchievementMongoRepository) UpdateDraft(ctx context.Context, id primiti
 	return err
 }
 
-func (r *AchievementMongoRepository) FindByIDs(
-	ctx context.Context,
-	ids []primitive.ObjectID,
-) ([]model.Achievement, error) {
+func (r *AchievementMongoRepository) FindByIDs(ctx context.Context, ids []primitive.ObjectID) ([]model.Achievement, error) {
 
 	cursor, err := r.Collection.Find(ctx, bson.M{
 		"_id": bson.M{"$in": ids},
@@ -161,4 +163,35 @@ func (r *AchievementMongoRepository) FindByIDs(
 	}
 
 	return result, nil
+}
+
+func (r *AchievementMongoRepository) AddAttachment(ctx context.Context, id primitive.ObjectID, studentID string,
+	att model.Attachment) error {
+
+	filter := bson.M{
+		"_id":        id,
+		"student_id": studentID,
+		"status":     "draft",
+		"is_deleted": false,
+	}
+
+	update := bson.M{
+		"$push": bson.M{
+			"attachments": att,
+		},
+		"$set": bson.M{
+			"updated_at": time.Now(),
+		},
+	}
+
+	res, err := r.Collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if res.MatchedCount == 0 {
+		return errors.New("prestasi tidak ditemukan atau tidak dalam draft")
+	}
+
+	return nil
 }

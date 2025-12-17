@@ -125,15 +125,23 @@ func RequireRole(role string) fiber.Handler {
 }
 
 func RequirePermission(p string) fiber.Handler {
+	required := strings.Split(p, ",")
+
+	for i := range required {
+		required[i] = strings.TrimSpace(required[i])
+	}
+
 	return func(c *fiber.Ctx) error {
 		perms, ok := c.Locals("permissions").([]string)
 		if !ok {
 			return c.Status(403).JSON(fiber.Map{"error": "forbidden"})
 		}
 
-		for _, perm := range perms {
-			if perm == p {
-				return c.Next()
+		for _, userPerm := range perms {
+			for _, req := range required {
+				if userPerm == req {
+					return c.Next()
+				}
 			}
 		}
 
